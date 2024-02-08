@@ -77,7 +77,6 @@ func NewCommand() *cobra.Command {
 		shardingAlgorithm                string
 		enableDynamicClusterDistribution bool
 		serverSideDiff                   bool
-		pprofAddress                     string
 	)
 	var command = cobra.Command{
 		Use:               cliName,
@@ -178,17 +177,19 @@ func NewCommand() *cobra.Command {
 			cacheutil.CollectMetrics(redisClient, appController.GetMetricsServer())
 
 			// run pprof server
-			pprofSrv, err := pprof.NewPprofServer(pprofAddress)
-			if err != nil {
-				log.Error(err, "failed to create pprof handler")
-				os.Exit(1)
-			}
-			go func() {
-				if err := pprofSrv.Start(ctx); err != nil {
-					log.Error(err, "unable to start pprof handler")
+			if pprof.IsEnabled() {
+				pprofSrv, err := pprof.NewPprofServer()
+				if err != nil {
+					log.Error(err, "failed to create pprof handler")
 					os.Exit(1)
 				}
-			}()
+				go func() {
+					if err := pprofSrv.Start(ctx); err != nil {
+						log.Error(err, "unable to start pprof handler")
+						os.Exit(1)
+					}
+				}()
+			}
 
 			stats.RegisterStackDumper()
 			stats.StartStatsTicker(10 * time.Minute)
@@ -246,7 +247,6 @@ func NewCommand() *cobra.Command {
 	command.Flags().Float64Var(&workqueueRateLimit.BackoffFactor, "wq-backoff-factor", env.ParseFloat64FromEnv("WORKQUEUE_BACKOFF_FACTOR", 1.5, 0, math.MaxFloat64), "Set Workqueue Per Item Rate Limiter Backoff Factor, default is 1.5")
 	command.Flags().BoolVar(&enableDynamicClusterDistribution, "dynamic-cluster-distribution-enabled", env.ParseBoolFromEnv(common.EnvEnableDynamicClusterDistribution, false), "Enables dynamic cluster distribution.")
 	command.Flags().BoolVar(&serverSideDiff, "server-side-diff-enabled", env.ParseBoolFromEnv(common.EnvServerSideDiff, false), "Feature flag to enable ServerSide diff. Default (\"false\")")
-	command.Flags().StringVar(&pprofAddress, "pprof-addr", "", "The address the pprof endpoint binds to.")
 	cacheSource = appstatecache.AddCacheFlagsToCmd(&command, cacheutil.Options{
 		OnClientCreated: func(client *redis.Client) {
 			redisClient = client

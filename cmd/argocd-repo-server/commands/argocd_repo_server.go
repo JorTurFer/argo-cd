@@ -71,7 +71,6 @@ func NewCommand() *cobra.Command {
 		streamedManifestMaxExtractedSize  string
 		helmManifestMaxExtractedSize      string
 		disableManifestMaxExtractedSize   bool
-		pprofAddress                      string
 	)
 	var command = cobra.Command{
 		Use:               cliName,
@@ -187,18 +186,19 @@ func NewCommand() *cobra.Command {
 			log.Infof("argocd-repo-server is listening on %s", listener.Addr())
 
 			// run pprof server
-			pprofSrv, err := pprof.NewPprofServer(pprofAddress)
-			if err != nil {
-				log.Error(err, "failed to create pprof handler")
-				os.Exit(1)
-			}
-			go func() {
-				if err := pprofSrv.Start(ctx); err != nil {
-					log.Error(err, "unable to start pprof handler")
+			if pprof.IsEnabled() {
+				pprofSrv, err := pprof.NewPprofServer()
+				if err != nil {
+					log.Error(err, "failed to create pprof handler")
 					os.Exit(1)
 				}
-			}()
-
+				go func() {
+					if err := pprofSrv.Start(ctx); err != nil {
+						log.Error(err, "unable to start pprof handler")
+						os.Exit(1)
+					}
+				}()
+			}
 			stats.RegisterStackDumper()
 			stats.StartStatsTicker(10 * time.Minute)
 			stats.RegisterHeapDumper("memprofile")
@@ -226,7 +226,6 @@ func NewCommand() *cobra.Command {
 	command.Flags().StringVar(&streamedManifestMaxExtractedSize, "streamed-manifest-max-extracted-size", env.StringFromEnv("ARGOCD_REPO_SERVER_STREAMED_MANIFEST_MAX_EXTRACTED_SIZE", "1G"), "Maximum size of streamed manifest archives when extracted")
 	command.Flags().StringVar(&helmManifestMaxExtractedSize, "helm-manifest-max-extracted-size", env.StringFromEnv("ARGOCD_REPO_SERVER_HELM_MANIFEST_MAX_EXTRACTED_SIZE", "1G"), "Maximum size of helm manifest archives when extracted")
 	command.Flags().BoolVar(&disableManifestMaxExtractedSize, "disable-helm-manifest-max-extracted-size", env.ParseBoolFromEnv("ARGOCD_REPO_SERVER_DISABLE_HELM_MANIFEST_MAX_EXTRACTED_SIZE", false), "Disable maximum size of helm manifest archives when extracted")
-	command.Flags().StringVar(&pprofAddress, "pprof-addr", "", "The address the pprof endpoint binds to.")
 	tlsConfigCustomizerSrc = tls.AddTLSFlagsToCmd(&command)
 	cacheSrc = reposervercache.AddCacheFlagsToCmd(&command, cacheutil.Options{
 		OnClientCreated: func(client *redis.Client) {
